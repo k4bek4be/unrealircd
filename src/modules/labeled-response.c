@@ -46,6 +46,7 @@ struct LabeledResponseContext {
 int lr_pre_command(Client *from, MessageTag *mtags, char *buf);
 int lr_post_command(Client *from, MessageTag *mtags, char *buf);
 int lr_packet(Client *from, Client *to, Client *intended_to, char **msg, int *len);
+int lr_user_quit(Client *client, MessageTag *mtags, char *comment);
 void *_labeled_response_save_context(void);
 void _labeled_response_set_context(void *ctx);
 void _labeled_response_force_end(void);
@@ -95,6 +96,7 @@ MOD_INIT()
 	HookAdd(modinfo->handle, HOOKTYPE_PRE_COMMAND, 2000000000, lr_pre_command);
 	HookAdd(modinfo->handle, HOOKTYPE_POST_COMMAND, -2000000000, lr_post_command);
 	HookAdd(modinfo->handle, HOOKTYPE_PACKET, 0, lr_packet);
+	HookAdd(modinfo->handle, HOOKTYPE_POST_LOCAL_QUIT, 2000000000, lr_user_quit);
 
 	return MOD_SUCCESS;
 }
@@ -217,6 +219,15 @@ done:
 	memset(&currentcmd, 0, sizeof(currentcmd));
 	labeled_response_inhibit = labeled_response_inhibit_end = labeled_response_force = 0;
 	return 0;
+}
+
+int lr_user_quit(Client *client, MessageTag *mtags, char *comment)
+{
+	/* If the user has sent something that would cause him to disconnect
+	 * (for example just a QUIT command), we should still conform to the
+	 * spec, and still send the ERROR message.
+	 */
+	return lr_post_command(client, mtags, NULL);
 }
 
 /** Helper function for lr_packet() to skip the message tags prefix,

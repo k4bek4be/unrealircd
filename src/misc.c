@@ -692,15 +692,14 @@ void exit_client(Client *client, MessageTag *recv_mtags, char *comment)
 	if (IsDead(client))
 		return; /* Already marked as exited */
 
-	/* We replace 'recv_mtags' here with a newly
-	 * generated id if 'recv_mtags' is NULL or is
+	/* We create a newly generated id here
+	 * if 'recv_mtags' is NULL or is
 	 * non-NULL and contains no msgid etc.
 	 * This saves us from doing a new_message()
 	 * prior to the exit_client() call at around
 	 * 100+ places elsewhere in the code.
 	 */
 	new_message(client, recv_mtags, &mtags_generated);
-	recv_mtags = mtags_generated;
 
 	if (MyConnect(client))
 	{
@@ -748,7 +747,7 @@ void exit_client(Client *client, MessageTag *recv_mtags, char *comment)
 		SetClosing(client);
 		if (IsUser(client))
 		{
-			RunHook3(HOOKTYPE_LOCAL_QUIT, client, recv_mtags, comment);
+			RunHook3(HOOKTYPE_LOCAL_QUIT, client, mtags_generated, comment);
 			sendto_connectnotice(client, 1, comment);
 			/* Clean out list and watch structures -Donwulff */
 			hash_del_watch_list(client);
@@ -765,7 +764,7 @@ void exit_client(Client *client, MessageTag *recv_mtags, char *comment)
 		} else
 		if (IsUnknown(client))
 		{
-			RunHook3(HOOKTYPE_UNKUSER_QUIT, client, recv_mtags, comment);
+			RunHook3(HOOKTYPE_UNKUSER_QUIT, client, mtags_generated, comment);
 		}
 
 		if (client->local->fd >= 0 && !IsConnecting(client))
@@ -773,6 +772,8 @@ void exit_client(Client *client, MessageTag *recv_mtags, char *comment)
 			sendto_one(client, NULL, "ERROR :Closing Link: %s (%s)",
 			    get_client_name(client, FALSE), comment);
 		}
+		if (IsUser(client))
+			RunHook3(HOOKTYPE_POST_LOCAL_QUIT, client, recv_mtags, comment);
 		close_connection(client);
 	}
 	else if (IsUser(client) && !IsULine(client))
@@ -797,17 +798,17 @@ void exit_client(Client *client, MessageTag *recv_mtags, char *comment)
 		else
 			ircsnprintf(splitstr, sizeof splitstr, "%s %s", client->srvptr->name, client->name);
 
-		remove_dependents(client, client->direction, recv_mtags, comment, splitstr);
+		remove_dependents(client, client->direction, mtags_generated, comment, splitstr);
 
-		RunHook2(HOOKTYPE_SERVER_QUIT, client, recv_mtags);
+		RunHook2(HOOKTYPE_SERVER_QUIT, client, mtags_generated);
 	}
 	else if (IsUser(client) && !IsKilled(client))
 	{
-		sendto_server(client, 0, 0, recv_mtags, ":%s QUIT :%s", client->id, comment);
+		sendto_server(client, 0, 0, mtags_generated, ":%s QUIT :%s", client->id, comment);
 	}
 
 	/* Finally, the client/server itself exits.. */
-	exit_one_client(client, recv_mtags, comment);
+	exit_one_client(client, mtags_generated, comment);
 
 	free_message_tags(mtags_generated);
 	
