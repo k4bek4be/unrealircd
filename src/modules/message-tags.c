@@ -257,12 +257,14 @@ int client_accepts_tag(const char *token, Client *client)
  * Taking into account the restrictions that 'client' may have.
  * @returns A string (static buffer) or NULL if no tags at all (!)
  */
-char *_mtags_to_string(MessageTag *m, Client *client)
+char *_mtags_to_string(MessageTag *mtags, Client *client)
 {
-	static char buf[4096], name[8192], value[8192];
+	static char buf[8191], name[8192], value[8192];
 	char tbuf[512];
+	int clienttags;
+	MessageTag *m;
 
-	if (!m)
+	if (!mtags)
 		return NULL;
 
 	/* Remote servers need to indicate support via PROTOCTL MTAGS */
@@ -270,20 +272,28 @@ char *_mtags_to_string(MessageTag *m, Client *client)
 		return NULL;
 
 	*buf = '\0';
-	for (; m; m = m->next)
+	/* first add all server tags, then append client tags.
+	 * FIXME we should also make sure not to truncate any tags.
+	 */
+	for (clienttags = 0; clienttags <= 1; clienttags++)
 	{
-		if (!client_accepts_tag(m->name, client))
-			continue;
-		if (m->value)
+		for (m = mtags; m; m = m->next)
 		{
-			message_tag_escape(m->name, name);
-			message_tag_escape(m->value, value);
-			snprintf(tbuf, sizeof(tbuf), "%s=%s;", name, value);
-		} else {
-			message_tag_escape(m->name, name);
-			snprintf(tbuf, sizeof(tbuf), "%s;", name);
+			if (clienttags?(m->name[0] != '+'):(m->name[0] == '+'))
+				continue;
+			if (!client_accepts_tag(m->name, client))
+				continue;
+			if (m->value)
+			{
+				message_tag_escape(m->name, name);
+				message_tag_escape(m->value, value);
+				snprintf(tbuf, sizeof(tbuf), "%s=%s;", name, value);
+			} else {
+				message_tag_escape(m->name, name);
+				snprintf(tbuf, sizeof(tbuf), "%s;", name);
+			}
+			strlcat(buf, tbuf, sizeof(buf));
 		}
-		strlcat(buf, tbuf, sizeof(buf));
 	}
 
 	if (!*buf)
